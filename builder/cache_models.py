@@ -1,7 +1,7 @@
 # builder/model_fetcher.py
 
 import torch
-from diffusers import StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline, AutoencoderKL
+from diffusers import FluxPipeline
 
 
 def fetch_pretrained_model(model_class, model_name, **kwargs):
@@ -26,20 +26,19 @@ def get_diffusion_pipelines():
     '''
     common_args = {
         "torch_dtype": torch.float16,
-        "variant": "fp16",
         "use_safetensors": True
     }
 
-    pipe = fetch_pretrained_model(StableDiffusionXLPipeline,
-                                  "stabilityai/stable-diffusion-xl-base-1.0", **common_args)
-    vae = fetch_pretrained_model(
-        AutoencoderKL, "madebyollin/sdxl-vae-fp16-fix", **{"torch_dtype": torch.float16}
-    )
-    print("Loaded VAE")
-    refiner = fetch_pretrained_model(StableDiffusionXLImg2ImgPipeline,
-                                     "stabilityai/stable-diffusion-xl-refiner-1.0", **common_args)
+    pipe = fetch_pretrained_model(FluxPipeline,
+                                  "black-forest-labs/FLUX.1-schnell", **common_args)
+    # vae = fetch_pretrained_model(
+    #     AutoencoderKL, "madebyollin/sdxl-vae-fp16-fix", **{"torch_dtype": torch.float16}
+    # )
+    # print("Loaded VAE")
+    # refiner = fetch_pretrained_model(FluxImg2ImgPipeline,
+    #                                  "black-forest-labs/FLUX.1-schnell", **common_args)
 
-    return pipe, refiner, vae
+    return pipe
 
 
 if __name__ == "__main__":
