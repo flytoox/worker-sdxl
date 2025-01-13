@@ -7,7 +7,8 @@ import base64
 import concurrent.futures
 
 import torch
-from diffusers import StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline, AutoencoderKL
+from diffusers import FluxPipeline
+#, FluxImg2ImgPipeline
 from diffusers.utils import load_image
 
 from diffusers import (
@@ -36,34 +37,30 @@ class ModelHandler:
         self.load_models()
 
     def load_base(self):
-        vae = AutoencoderKL.from_pretrained(
-            "madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
-        base_pipe = StableDiffusionXLPipeline.from_pretrained(
-            "stabilityai/stable-diffusion-xl-base-1.0", vae=vae,
-            torch_dtype=torch.float16, variant="fp16", use_safetensors=True, add_watermarker=False
+        base_pipe = FluxPipeline.from_pretrained(
+            "black-forest-labs/FLUX.1-schnell",
+            torch_dtype=torch.float16, use_safetensors=True
         )
         base_pipe = base_pipe.to("cuda", silence_dtype_warnings=True)
         base_pipe.enable_xformers_memory_efficient_attention()
         return base_pipe
 
-    def load_refiner(self):
-        vae = AutoencoderKL.from_pretrained(
-            "madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
-        refiner_pipe = StableDiffusionXLImg2ImgPipeline.from_pretrained(
-            "stabilityai/stable-diffusion-xl-refiner-1.0", vae=vae,
-            torch_dtype=torch.float16, variant="fp16", use_safetensors=True, add_watermarker=False
-        )
-        refiner_pipe = refiner_pipe.to("cuda", silence_dtype_warnings=True)
-        refiner_pipe.enable_xformers_memory_efficient_attention()
-        return refiner_pipe
+    # def load_refiner(self):
+    #     refiner_pipe = FluxImg2ImgPipeline.from_pretrained(
+    #         "black-forest-labs/FLUX.1-schnell",
+    #         torch_dtype=torch.float16, use_safetensors=True
+    #     )
+    #     refiner_pipe = refiner_pipe.to("cuda", silence_dtype_warnings=True)
+    #     refiner_pipe.enable_xformers_memory_efficient_attention()
+    #     return refiner_pipe
 
     def load_models(self):
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future_base = executor.submit(self.load_base)
-            future_refiner = executor.submit(self.load_refiner)
+            # future_refiner = executor.submit(self.load_refiner)
 
             self.base = future_base.result()
-            self.refiner = future_refiner.result()
+            # self.refiner = future_refiner.result()
 
 
 MODELS = ModelHandler()
@@ -115,7 +112,7 @@ def generate_image(job):
         return {"error": validated_input['errors']}
     job_input = validated_input['validated_input']
 
-    starting_image = job_input['image_url']
+    # starting_image = job_input['image_url']
 
     if job_input['seed'] is None:
         job_input['seed'] = int.from_bytes(os.urandom(2), "big")
@@ -125,46 +122,46 @@ def generate_image(job):
     MODELS.base.scheduler = make_scheduler(
         job_input['scheduler'], MODELS.base.scheduler.config)
 
-    if starting_image:  # If image_url is provided, run only the refiner pipeline
-        init_image = load_image(starting_image).convert("RGB")
-        output = MODELS.refiner(
-            prompt=job_input['prompt'],
-            num_inference_steps=job_input['refiner_inference_steps'],
-            strength=job_input['strength'],
-            image=init_image,
-            generator=generator
-        ).images
-    else:
+    # if starting_image:  # If image_url is provided, run only the refiner pipeline
+    #     init_image = load_image(starting_image).convert("RGB")
+    #     output = MODELS.refiner(
+    #         prompt=job_input['prompt'],
+    #         num_inference_steps=job_input['refiner_inference_steps'],
+    #         strength=job_input['strength'],
+    #         image=init_image,
+    #         generator=generator
+    #     ).images
+    # else:
         # Generate latent image using pipe
-        image = MODELS.base(
-            prompt=job_input['prompt'],
-            negative_prompt=job_input['negative_prompt'],
-            height=job_input['height'],
-            width=job_input['width'],
-            num_inference_steps=job_input['num_inference_steps'],
-            guidance_scale=job_input['guidance_scale'],
-            denoising_end=job_input['high_noise_frac'],
-            output_type="latent",
-            num_images_per_prompt=job_input['num_images'],
-            generator=generator
-        ).images
+    image = MODELS.base(
+        prompt=job_input['prompt'],
+        negative_prompt=job_input['negative_prompt'],
+        height=job_input['height'],
+        width=job_input['width'],
+        num_inference_steps=job_input['num_inference_steps'],
+        guidance_scale=job_input['guidance_scale'],
+        denoising_end=job_input['high_noise_frac'],
+        output_type="latent",
+        num_images_per_prompt=job_input['num_images'],
+        generator=generator
+    ).images
 
-        try:
-            output = MODELS.refiner(
-                prompt=job_input['prompt'],
-                num_inference_steps=job_input['refiner_inference_steps'],
-                strength=job_input['strength'],
-                image=image,
-                num_images_per_prompt=job_input['num_images'],
-                generator=generator
-            ).images
-        except RuntimeError as err:
-            return {
-                "error": f"RuntimeError: {err}, Stack Trace: {err.__traceback__}",
-                "refresh_worker": True
-            }
+        # try:
+        #     output = MODELS.refiner(
+        #         prompt=job_input['prompt'],
+        #         num_inference_steps=job_input['refiner_inference_steps'],
+        #         strength=job_input['strength'],
+        #         image=image,
+        #         num_images_per_prompt=job_input['num_images'],
+        #         generator=generator
+        #     ).images
+        # except RuntimeError as err:
+        #     return {
+        #         "error": f"RuntimeError: {err}, Stack Trace: {err.__traceback__}",
+        #         "refresh_worker": True
+        #     }
 
-    image_urls = _save_and_upload_images(output, job['id'])
+    image_urls = _save_and_upload_images(image, job['id'])
 
     results = {
         "images": image_urls,
