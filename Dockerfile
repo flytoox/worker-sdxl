@@ -10,9 +10,10 @@ RUN python3.11 -m pip install --upgrade pip && \
     rm /requirements.txt
 
 # Cache Models
-COPY builder/cache_models.py /cache_models.py
-RUN python3.11 /cache_models.py && \
-    rm /cache_models.py
+COPY FLUX.1-schnell /FLUX.1-schnell
+#COPY builder/cache_models.py /cache_models.py
+#RUN python3.11 /cache_models.py && \
+#    rm /cache_models.py
 
 # Add src files (Worker Template)
 ADD src .
